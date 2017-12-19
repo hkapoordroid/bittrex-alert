@@ -4,6 +4,7 @@ import boto3
 import logging
 import urllib2
 import time
+import os
 
 
 BUY_ORDERBOOK = 'buy'
@@ -32,9 +33,9 @@ CONDITIONTYPE_STOP_LOSS_PERCENTAGE = 'STOP_LOSS_PERCENTAGE'
 BITTREX_GET_MARKETS_URL = "https://bittrex.com/api/v1.1/public/getmarkets"
 BITTREX_GET_TICKS_URL = "https://bittrex.com/Api/v2.0/pub/market/GetTicks?marketName={0}&tickInterval={1}&_={2}"
 
-ALERT_PRICE_CHANGE_THRESHOLD = 5
-ALERT_VOLUME_CHANGE_THRESHOLD = 50
-ALERT_VOLUME_MIN_THRESHOLD = 100
+DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD = 5
+DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD = 50
+DEFAULT_ALERT_VOLUME_MIN_THRESHOLD = 100
 
 
 logger = logging.getLogger()
@@ -102,7 +103,7 @@ def calculatePercentageDiff(start_val, end_val):
 
     return valPercDiff*100
 
-def alertOnDiffInPriceAndVolume(market_name, candles):
+def alertOnDiffInPriceAndVolume(market_name, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold):
     '''
         This method checks past 2 intervals data to see if there is increase or decrease in price more than threshold
     '''
@@ -114,6 +115,8 @@ def alertOnDiffInPriceAndVolume(market_name, candles):
     secondCandle = candles[-1]
 
     logging.debug("First Candle : {0}\n Second Candle : {1}".format(firstCandle, secondCandle))
+    logging.debug("priceChangeThreshold : {0} \n volumeChangeThreshold : {1} \n volumeMinThreshold : {2}".format(priceChangeThreshold,
+    volumeChangeThreshold,volumeMinThreshold))
 
     firstOpen = firstCandle['O']
     firstClose = firstCandle['C']
@@ -123,8 +126,13 @@ def alertOnDiffInPriceAndVolume(market_name, candles):
     secondVol = secondCandle['V']
     secondTime = secondCandle['T']
 
-    firstPriceDiff = calculatePercentageDiff(firstOpen, firstClose)
-    secondPriceDiff = calculatePercentageDiff(secondOpen, secondClose)
+    if market_name.startswith("BTC"):
+        multipler = 100000000
+    else:
+        multipler = 1
+
+    firstPriceDiff = calculatePercentageDiff(firstOpen*multipler, firstClose*multipler)
+    secondPriceDiff = calculatePercentageDiff(secondOpen*multipler, secondClose*multipler)
     volumeDiff = calculatePercentageDiff(firstVol, secondVol)
 
     #first lets check if volume has increase or decreased
@@ -142,9 +150,16 @@ def alertOnDiffInPriceAndVolume(market_name, candles):
         priceTrend = 'Mix'
 
     #lets check against the threshold values
+    logging.info('secondPriceDiff : {0}\n secondVol : {1}\n priceChangeThreshold : {2}\n volumeMinThreshold : {3}'.format(
+        secondPriceDiff, secondVol, priceChangeThreshold, volumeMinThreshold))
     sendAlert = False
-    if abs(secondPriceDiff) > ALERT_PRICE_CHANGE_THRESHOLD and secondVol >= ALERT_VOLUME_MIN_THRESHOLD:
+
+    if abs(secondPriceDiff) > priceChangeThreshold and secondVol > volumeMinThreshold:
         sendAlert = True
+
+    #if int(secondVol) >= volumeMinThreshold:
+    #    sendAlert = True
+    #    logging.info("send alert true for market {0}".format(market_name))
     #if abs(volumeDiff) > ALERT_VOLUME_CHANGE_THRESHOLD:
     #    sendAlert = True
 
@@ -167,8 +182,9 @@ def alertOnDiffInPriceAndVolume(market_name, candles):
         VolumeTrend:{4}\n \
         VolumeDiff:{5:.2f}%\n \
         LastIntervalVolume:{6:.2f}\n \
-        LastPrice:{7}{8}".format(market_name, secondTime, priceTrend, secondPriceDiff, volumeTrend, volumeDiff,
-        secondVol, priceSymbol, secondClose)
+        LastPrice:{7}{8}\n \
+        https://bittrex.com/Market/Index?MarketName={9}\n\n".format(market_name, secondTime, priceTrend, secondPriceDiff, volumeTrend, volumeDiff,
+        secondVol, priceSymbol, secondClose,market_name)
 
     return alertMsg
 
@@ -182,7 +198,26 @@ def main(event, context):
     "BTC-NEO", "BTC-NEOS", "BTC-ETC", "BTC-QTUM", "BTC-LSK", "BTC-OMG", "BTC-ZEC", "BTC-WAVES",
     "BTC-STRAT", "BTC-ARDR", "BTC-NXT", "BTC-XVG", "BTC-MONA", "BTC-DOGE", "BTC-SNT", "BTC-STEEM", "BTC-ARK", "BTC-DCR", "BTC-EMC2",
     "BTC-KMD", "BTC-SALT", "BTC-REP", "BTC-SC", "BTC-PIVX", "BTC-GNT", "BTC-PAY", "BTC-VTC", "BTC-GBYTE", "BTC-DGB"]
-    #marketsToWatch = None
+
+    #marketsToWatch = ["BTC-QTUM"]
+
+    #Get the algorithm configuration params from env if exists else use defaults
+    priceChangeThreshold = int(os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD')) if os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD') else DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD
+    volumeChangeThreshold = int(os.environ.get('ALERT_VOLUME_CHANGE_THRESHOLD')) if os.environ.get('ALERT_VOLUME_CHANGE_THRESHOLD') else DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD
+    volumeMinThreshold = int(os.environ.get('ALERT_VOLUME_MIN_THRESHOLD')) if os.environ.get('ALERT_VOLUME_MIN_THRESHOLD') else DEFAULT_ALERT_VOLUME_MIN_THRESHOLD
+    intervals = os.environ.get('ALERT_INTERVAL') if os.environ.get('ALERT_INTERVAL') else TICKINTERVAL_THIRTYMIN
+    snsTopicARN = os.environ.get('SNS_TOPIC_ARN')
+
+    if not snsTopicARN:
+        raise Exception('Please provide sns topic arn as environment variable.')
+        #example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
+        # beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
+
+    logging.info("ALERT_PRICE_CHANGE_THRESHOLD : {0}\n \
+    ALERT_VOLUME_CHANGE_THRESHOLD : {1}\n \
+    ALERT_VOLUME_MIN_THRESHOLD : {2}\n \
+    ALERT_INTERVALS : {3}\n".format(priceChangeThreshold,
+    volumeChangeThreshold, volumeMinThreshold, intervals))
 
     markets = marketsToWatch if marketsToWatch else allMarketNames
 
@@ -191,8 +226,8 @@ def main(event, context):
     alertFound = False
     for market in markets:
         if market.startswith("BTC"):
-            candles = getCandles(market, TICKINTERVAL_THIRTYMIN)
-            alertMsg = alertOnDiffInPriceAndVolume(market, candles)
+            candles = getCandles(market, intervals)
+            alertMsg = alertOnDiffInPriceAndVolume(market, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold)
             logging.debug("Alert Message : {0}".format(str(alertMsg)))
 
             if alertMsg:
@@ -200,16 +235,17 @@ def main(event, context):
                 alertFound = True
 
     if not alertFound:
-        snsAlertMsg = "Nothing to alert on based on current thresholds. Min Volume {0} and Price Diff {1}".format(ALERT_VOLUME_MIN_THRESHOLD,
-        ALERT_PRICE_CHANGE_THRESHOLD)
+        snsAlertMsg = "Nothing to alert on based on current thresholds. Min Volume {0} and Price Diff {1}".format(volumeMinThreshold,
+        priceChangeThreshold)
 
     logging.info("Final SNS Message to publish : {0}".format(snsAlertMsg))
-    client.publish(TopicArn='arn:aws:sns:us-east-1:787766881935:bittrex-alerts',
-    Message=snsAlertMsg,
-    Subject='Bittrex Alert!',
-    MessageStructure='string')
 
-
+    if event: #this prevents from sending alerts during testing on local machine
+        client.publish(TopicArn=snsTopicARN,
+        Message=snsAlertMsg,
+        Subject='Bittrex Alert!',
+        MessageStructure='string')
+        logging.info('Published to SNS Topic {0}'.format(snsTopicARN))
 
 if __name__ == '__main__':
     main(None, None)
