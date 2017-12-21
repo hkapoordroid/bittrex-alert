@@ -33,9 +33,9 @@ CONDITIONTYPE_STOP_LOSS_PERCENTAGE = 'STOP_LOSS_PERCENTAGE'
 BITTREX_GET_MARKETS_URL = "https://bittrex.com/api/v1.1/public/getmarkets"
 BITTREX_GET_TICKS_URL = "https://bittrex.com/Api/v2.0/pub/market/GetTicks?marketName={0}&tickInterval={1}&_={2}"
 
-DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD = 5
+DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD = 1
 DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD = 50
-DEFAULT_ALERT_VOLUME_MIN_THRESHOLD = 100
+DEFAULT_ALERT_VOLUME_MIN_THRESHOLD = 10
 
 HEALTHCHECK_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
 LEADS_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
@@ -208,13 +208,13 @@ def main(event, context):
     priceChangeThreshold = int(os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD')) if os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD') else DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD
     volumeChangeThreshold = int(os.environ.get('ALERT_VOLUME_CHANGE_THRESHOLD')) if os.environ.get('ALERT_VOLUME_CHANGE_THRESHOLD') else DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD
     volumeMinThreshold = int(os.environ.get('ALERT_VOLUME_MIN_THRESHOLD')) if os.environ.get('ALERT_VOLUME_MIN_THRESHOLD') else DEFAULT_ALERT_VOLUME_MIN_THRESHOLD
-    intervals = os.environ.get('ALERT_INTERVAL') if os.environ.get('ALERT_INTERVAL') else TICKINTERVAL_THIRTYMIN
+    intervals = os.environ.get('ALERT_INTERVAL') if os.environ.get('ALERT_INTERVAL') else TICKINTERVAL_FIVEMIN
     snsTopicARN = os.environ.get('SNS_TOPIC_ARN')
 
     if not snsTopicARN:
         raise Exception('Please provide sns topic arn as environment variable.')
-        example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
-        beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
+        #example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
+        #beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
 
     logging.info("ALERT_PRICE_CHANGE_THRESHOLD : {0}\n \
     ALERT_VOLUME_CHANGE_THRESHOLD : {1}\n \
