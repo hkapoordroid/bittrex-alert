@@ -1,11 +1,11 @@
 from __future__ import print_function
 import json
-import boto3
 import logging
 import urllib2
 import time
 import os
-
+import requests
+import boto3
 
 BUY_ORDERBOOK = 'buy'
 SELL_ORDERBOOK = 'sell'
@@ -37,6 +37,9 @@ DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD = 5
 DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD = 50
 DEFAULT_ALERT_VOLUME_MIN_THRESHOLD = 100
 
+HEALTHCHECK_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+LEADS_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+webhook_url = ""
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -210,8 +213,8 @@ def main(event, context):
 
     if not snsTopicARN:
         raise Exception('Please provide sns topic arn as environment variable.')
-        #example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
-        # beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
+        example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
+        beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
 
     logging.info("ALERT_PRICE_CHANGE_THRESHOLD : {0}\n \
     ALERT_VOLUME_CHANGE_THRESHOLD : {1}\n \
@@ -233,12 +236,18 @@ def main(event, context):
             if alertMsg:
                 snsAlertMsg = snsAlertMsg + '\n' + alertMsg
                 alertFound = True
+                webhook_url = LEADS_SLACK_WEBHOOK
 
     if not alertFound:
         snsAlertMsg = "Nothing to alert on based on current thresholds. Min Volume {0} and Price Diff {1}".format(volumeMinThreshold,
         priceChangeThreshold)
+        webhook_url = HEALTHCHECK_SLACK_WEBHOOK
 
     logging.info("Final SNS Message to publish : {0}".format(snsAlertMsg))
+
+    payload = {
+        "text": snsAlertMsg, #message you want to send
+    }
 
     if event: #this prevents from sending alerts during testing on local machine
         client.publish(TopicArn=snsTopicARN,
@@ -246,6 +255,11 @@ def main(event, context):
         Subject='Bittrex Alert!',
         MessageStructure='string')
         logging.info('Published to SNS Topic {0}'.format(snsTopicARN))
+        response = requests.post(webhook_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
+        if response.status_code != 200:
+            raise ValueError(
+                'Request to slack returned an error %s, the response is:\n%s' % (response.status_code, response.text)
+                )
 
 if __name__ == '__main__':
     main(None, None)
