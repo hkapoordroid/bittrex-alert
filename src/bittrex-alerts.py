@@ -9,6 +9,7 @@ import boto3
 from utils import *
 from candles import candle, candlesInsights
 import time
+import sys
 
 BUY_ORDERBOOK = 'buy'
 SELL_ORDERBOOK = 'sell'
@@ -302,35 +303,45 @@ def main(event, context):
         else:
             raise Exception("Unsupported Market being analyzed {0}".format(market))
 
-        candlesList = getCandles(market, intervalSize, intervalsToConsider)
-        candlesInsightsObj = candlesInsights(candlesList)
+        candlesList = None
+        try:
+            candlesList = getCandles(market, intervalSize, intervalsToConsider)
+        except:
+            logging.error("Couldn't find data for market {0} : {1}".format(market, sys.exc_info()[0]))
 
-        #alertMsg = alertOnDiffInPriceAndVolume(market, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold)
-        priceTrendData = candlesInsightsObj.getPriceTrend()
-        volumeTrendData = candlesInsightsObj.getVolumeTrend()
+        if candlesList:
+            candlesInsightsObj = candlesInsights(candlesList)
 
-        #apply the alert threshold rules
-        #priceTrendData is tuple of format (priceDiff, greenCandlesCount, redCandlesCount, priceTrend, intervalsOpenPrice, intervalsClosePrice. lastIntervalTimestamp)
-        #volumeTrendData is tuple of format (volumeDiff, volumeTrend, firstIntervalVolume, lastIntervalVolume)
-        if abs(priceTrendData[0]) > priceChangeThreshold and volumeTrendData[3] > volumeMinThreshold:
-            alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
-VolumeDiff: {4:.2f}%\n\nLastIntervalVolume: {5:.2f} BTC\nIntervalsOpenPrice: ${6:.4f}\n\
-IntervalsClosePrice: ${7:.4f}\nGreenCandles: {8}\nRedCandles: {9}\nIntervalSize: {10}\n\
-IntervalsConsidered: {11}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
-volumeTrendData[1], volumeTrendData[0], volumeTrendData[3], priceTrendData[4]*dollarMultipler,
-priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
-intervalSize, intervalsToConsider)
+            #alertMsg = alertOnDiffInPriceAndVolume(market, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold)
+            priceTrendData = candlesInsightsObj.getPriceTrend()
+            volumeTrendData = candlesInsightsObj.getVolumeTrend()
 
-            msgColor = MIX_COLOR
-            if priceTrendData[3] == BULLISH_TREND and volumeTrendData[1] == BULLISH_TREND:
-                msgColor = BULLISH_COLOR
-            elif priceTrendData[3] == BEARISH_TREND and volumeTrendData[1] == BEARISH_TREND:
-                msgColor = BEARISH_COLOR
+            #apply the alert threshold rules
+            #priceTrendData is tuple of format (priceDiff, greenCandlesCount, redCandlesCount, priceTrend, intervalsOpenPrice, intervalsClosePrice. lastIntervalTimestamp)
+            #volumeTrendData is tuple of format (volumeDiff, volumeTrend, firstIntervalVolume, lastIntervalVolume)
+            logging.info("PriceDiff {0}\nLastIntervalVolume {1}\npriceChangeThreshold {2}\nvolumeMinThreshold {3}".format(
+            abs(float(priceTrendData[0])), abs(float(volumeTrendData[3])), priceChangeThreshold, volumeMinThreshold))
 
-            publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
-            logging.info(publishMsg)
-            alertMsgBuilder.append(publishMsg)
-            alertFound = True
+            if abs(float(priceTrendData[0])) > float(priceChangeThreshold) and abs(float(volumeTrendData[3])) > float(volumeMinThreshold):
+                alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
+    VolumeDiff: {4:.2f}%\n\nLastIntervalVolume: {5:.2f} BTC\nIntervalsOpenPrice: ${6:.4f}\n\
+    IntervalsClosePrice: ${7:.4f}\nGreenCandles: {8}\nRedCandles: {9}\nIntervalSize: {10}\n\
+    IntervalsConsidered: {11}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
+    volumeTrendData[1], volumeTrendData[0], volumeTrendData[3], priceTrendData[4]*dollarMultipler,
+    priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
+    intervalSize, intervalsToConsider)
+
+                msgColor = MIX_COLOR
+                if priceTrendData[3] == BULLISH_TREND and volumeTrendData[1] == BULLISH_TREND:
+                    msgColor = BULLISH_COLOR
+                elif priceTrendData[3] == BEARISH_TREND and volumeTrendData[1] == BEARISH_TREND:
+                    msgColor = BEARISH_COLOR
+
+                publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
+                logging.debug(publishMsg)
+                alertMsgBuilder.append(publishMsg)
+                alertFound = True
+                logging.info("Alert Found!")
 
     if not alertFound:
         publishMsg = formatSlackHealthMessage("Boring Market!\nNothing to alert on based on current thresholds.")
@@ -339,7 +350,9 @@ intervalSize, intervalsToConsider)
     else:
         webhook_url = LEADS_SLACK_WEBHOOK
 
-    if event: #this prevents from sending alerts during testing on local machine
+    if alertFound:#Currently stopping sending health messages, I'll set that up using cloudwatch alarms
+        logging.info("Total alerts to send {0}".format(len(alertMsgBuilder)))
+
         for msg in alertMsgBuilder:
             '''
             client.publish(TopicArn=snsTopicARN,
