@@ -1,1 +1,0 @@
-aws lambda update-function-code --function-name bittrex-alerts --s3-bucket bittrex-alerts-lambda --s3-key bittrex-alerts.zip
