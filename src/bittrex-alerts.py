@@ -10,45 +10,9 @@ from utils import *
 from candles import candle, candlesInsights
 import time
 import sys
+from dao import *
+from constants import *
 
-BUY_ORDERBOOK = 'buy'
-SELL_ORDERBOOK = 'sell'
-BOTH_ORDERBOOK = 'both'
-
-TICKINTERVAL_ONEMIN = 'oneMin'
-TICKINTERVAL_FIVEMIN = 'fiveMin'
-TICKINTERVAL_HOUR = 'hour'
-TICKINTERVAL_THIRTYMIN = 'thirtyMin'
-TICKINTERVAL_DAY = 'Day'
-
-INTERVALS_TO_CONSIDER = 6
-
-ORDERTYPE_LIMIT = 'LIMIT'
-ORDERTYPE_MARKET = 'MARKET'
-
-TIMEINEFFECT_GOOD_TIL_CANCELLED = 'GOOD_TIL_CANCELLED'
-TIMEINEFFECT_IMMEDIATE_OR_CANCEL = 'IMMEDIATE_OR_CANCEL'
-TIMEINEFFECT_FILL_OR_KILL = 'FILL_OR_KILL'
-
-CONDITIONTYPE_NONE = 'NONE'
-CONDITIONTYPE_GREATER_THAN = 'GREATER_THAN'
-CONDITIONTYPE_LESS_THAN = 'LESS_THAN'
-CONDITIONTYPE_STOP_LOSS_FIXED = 'STOP_LOSS_FIXED'
-CONDITIONTYPE_STOP_LOSS_PERCENTAGE = 'STOP_LOSS_PERCENTAGE'
-
-BITTREX_ALERT_TITLE = "Bittrex Alert!"
-
-BITTREX_GET_MARKETS_URL = "https://bittrex.com/api/v1.1/public/getmarkets"
-BITTREX_GET_TICKS_URL = "https://bittrex.com/Api/v2.0/pub/market/GetTicks?marketName={0}&tickInterval={1}&_={2}"
-BITTREX_GET_BTC_PRICE_URL = "https://bittrex.com/api/v2.0/pub/currencies/GetBTCPrice"
-BITTREX_GET_ETH_PRICE_URL = "https://bittrex.com/Api/v2.0/pub/market/GetLatestTick?marketName=BTC-ETH&tickInterval=oneMin&_={0}"
-
-DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD = 3
-DEFAULT_ALERT_VOLUME_CHANGE_THRESHOLD = 50
-DEFAULT_ALERT_VOLUME_MIN_THRESHOLD = 50
-
-HEALTHCHECK_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
-LEADS_SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
 webhook_url = ""
 
 logger = logging.getLogger()
@@ -157,97 +121,12 @@ def getCandles(market_name, interval_size, intervals_to_retrieve=6):
 
     return candles
 
-def alertOnDiffInPriceAndVolume(market_name, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold):
-    '''
-        This method checks past 2 intervals data to see if there is increase or decrease in price more than threshold
-    '''
-
-    if len(candles) < 2:
-        raise Exception("Need atleast 2 intervals of candles data, {0}".format(candles))
-
-    firstCandle = candles[-2]
-    secondCandle = candles[-1]
-
-    logging.debug("First Candle : {0}\n Second Candle : {1}".format(firstCandle, secondCandle))
-    logging.debug("priceChangeThreshold : {0} \n volumeChangeThreshold : {1} \n volumeMinThreshold : {2}".format(priceChangeThreshold,
-    volumeChangeThreshold,volumeMinThreshold))
-
-    firstOpen = firstCandle['O']
-    firstClose = firstCandle['C']
-    firstVol = firstCandle['V']
-    secondOpen = secondCandle['O']
-    secondClose = secondCandle['C']
-    secondVol = secondCandle['V']
-    secondTime = secondCandle['T']
-
-    if market_name.startswith("BTC"):
-        multipler = 100000000
-    else:
-        multipler = 1
-
-    firstPriceDiff = calculatePercentageDiff(firstOpen*multipler, firstClose*multipler)
-    secondPriceDiff = calculatePercentageDiff(secondOpen*multipler, secondClose*multipler)
-    volumeDiff = calculatePercentageDiff(firstVol, secondVol)
-
-    #first lets check if volume has increase or decreased
-    volumeTrend = "Down"
-    if secondVol > firstVol:
-        volumeTrend = "UP"
-
-    #lets check trend of price change
-    priceTrend = "NA"
-    if firstClose > firstOpen and secondClose > secondOpen:
-        priceTrend = 'UP'
-    elif firstClose < firstOpen and secondClose < secondOpen:
-        priceTrend = 'Down'
-    else:
-        priceTrend = 'Mix'
-
-    #lets check against the threshold values
-    logging.info('secondPriceDiff : {0}\n secondVol : {1}\n priceChangeThreshold : {2}\n volumeMinThreshold : {3}'.format(
-        secondPriceDiff, secondVol, priceChangeThreshold, volumeMinThreshold))
-    sendAlert = False
-
-    if abs(secondPriceDiff) > priceChangeThreshold and secondVol > volumeMinThreshold:
-        sendAlert = True
-
-    #if int(secondVol) >= volumeMinThreshold:
-    #    sendAlert = True
-    #    logging.info("send alert true for market {0}".format(market_name))
-    #if abs(volumeDiff) > ALERT_VOLUME_CHANGE_THRESHOLD:
-    #    sendAlert = True
-
-    priceSymbol = ""
-    if market_name.startswith("USDT"):
-        priceSymbol = "$"
-    elif market_name.startswith("BTC"):
-        priceSymbol = "BTC"
-    elif market_name.startswith("LTC"):
-        priceSymbol = "LTC"
-    elif market_name.startswith("ETH"):
-        priceSymbol = "ETH"
-
-    alertMsg = None
-    if sendAlert:
-        alertMsg = "Market:{0}\n \
-        Time:{1}\n \
-        PriceTrend:{2}\n \
-        PriceDiff:{3:.2f}%\n \
-        VolumeTrend:{4}\n \
-        VolumeDiff:{5:.2f}%\n \
-        LastIntervalVolume:{6:.2f}\n \
-        LastPrice:{7}{8}\n \
-        https://bittrex.com/Market/Index?MarketName={9}\n\n".format(market_name, secondTime, priceTrend, secondPriceDiff, volumeTrend, volumeDiff,
-        secondVol, priceSymbol, secondClose,market_name)
-
-    return alertMsg
-
-
 def main(event, context):
     '''
         main function which executes the alerts
     '''
     allMarketNames = getMarketNames()
+
 
     marketsToWatch = ["BTC-LTC", "BTC-ETH", "BTC-BCC", "BTC-XRP", "BTC-ADA", "BTC-DASH", "BTC-XMR", "BTC-BTG", "BTC-XLM",
     "BTC-NEO", "BTC-NEOS", "BTC-ETC", "BTC-QTUM", "BTC-LSK", "BTC-OMG", "BTC-ZEC", "BTC-WAVES", "BTC-STRAT", "BTC-ARDR", "BTC-NXT",
@@ -332,16 +211,29 @@ def main(event, context):
     intervalSize, intervalsToConsider)
 
                 msgColor = MIX_COLOR
+                signalType = SIGNAL_TYPE_NA
                 if priceTrendData[3] == BULLISH_TREND and volumeTrendData[1] == BULLISH_TREND:
                     msgColor = BULLISH_COLOR
+                    signalType = SIGNAL_TYPE_BUY
                 elif priceTrendData[3] == BEARISH_TREND and volumeTrendData[1] == BEARISH_TREND:
                     msgColor = BEARISH_COLOR
+                    signalType = SIGNAL_TYPE_SELL
 
                 publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
                 logging.debug(publishMsg)
                 alertMsgBuilder.append(publishMsg)
                 alertFound = True
                 logging.info("Alert Found!")
+
+                #persist the signal which we are about to send for later analysis
+                if signalType in [SIGNAL_TYPE_BUY, SIGNAL_TYPE_SELL]:
+                    insertSignal(market_name=market, timestamp=priceTrendData[6], signal_type=signalType, price_trend=priceTrendData[3],
+                    price_diff=priceTrendData[0], volume_trend=volumeTrendData[1], volume_diff=volumeTrendData[0],
+                    last_interval_volume=volumeTrendData[3], intervals_open_price=priceTrendData[4]*dollarMultipler,
+                    intervals_close_price=priceTrendData[5]*dollarMultipler, green_candles_count=priceTrendData[1],
+                    red_candles_count=priceTrendData[2], interval_size=intervalSize, intervals_considered=intervalsToConsider,
+                    price_change_threshold=priceChangeThreshold, volume_min_threshold=volumeMinThreshold,
+                    volume_change_threshold=volumeChangeThreshold)
 
     if not alertFound:
         publishMsg = formatSlackHealthMessage("Boring Market!\nNothing to alert on based on current thresholds.")

@@ -2,6 +2,7 @@ from __future__ import print_function
 import logging
 import sys
 from utils import *
+from constants import *
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
