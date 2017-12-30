@@ -128,12 +128,16 @@ def main(event, context):
     allMarketNames = getMarketNames()
 
 
-    marketsToWatch = ["BTC-LTC", "BTC-ETH", "BTC-BCC", "BTC-XRP", "BTC-ADA", "BTC-DASH", "BTC-XMR", "BTC-BTG", "BTC-XLM",
-    "BTC-NEO", "BTC-NEOS", "BTC-ETC", "BTC-QTUM", "BTC-LSK", "BTC-OMG", "BTC-ZEC", "BTC-WAVES", "BTC-STRAT", "BTC-ARDR", "BTC-NXT",
-    "BTC-XVG", "BTC-MONA", "BTC-DOGE", "BTC-SNT", "BTC-STEEM", "BTC-ARK", "BTC-DCR", "BTC-EMC2", "BTC-KMD", "BTC-SALT", "BTC-REP",
-    "BTC-SC", "BTC-PIVX", "BTC-GNT", "BTC-PAY", "BTC-VTC", "BTC-GBYTE", "BTC-DGB",
-    "ETH-LTC","ETH-BCC","ETH-XRP","ETH-ADA", "ETH-DASH", "ETH-XMR", "ETH-BTG", "ETH-XLM","ETH-NEO", "ETH-ETC", "ETH-QTUM", "ETH-OMG",
-    "ETH-ZEC", "ETH-WAVES", "ETH-STRAT", "ETH-MCO", "ETH-SNT", "ETH-SALT", "ETH-REP", "ETH-SC", "ETH-GNT", "ETH-PAY", "ETH-DGB"]
+    #removed on 12/30/2017
+    #"BTC-ETC", "BTC-BTG", "BTC-WAVES", "BTC-STRAT", "BTC-ARDR", "BTC-MONA", "BTC-DOGE", "BTC-SNT", "BTC-DCR", "BTC-EMC2", "BTC-KMD", "BTC-PIVX",
+    # "BTC-PAY", "BTC-VTC", "BTC-GBYTE",
+    # "ETH-BTG", "ETH-ETC", "ETH-WAVES", "ETH-STRAT", "ETH-MCO", "ETH-SNT", "ETH-PAY", 
+
+    marketsToWatch = ["BTC-LTC", "BTC-ETH", "BTC-BCC", "BTC-XRP", "BTC-ADA", "BTC-DASH", "BTC-XMR", "BTC-XLM",
+    "BTC-NEO", "BTC-NEOS", "BTC-QTUM", "BTC-LSK", "BTC-OMG", "BTC-ZEC", "BTC-NXT",
+    "BTC-XVG", "BTC-STEEM", "BTC-ARK", "BTC-SALT", "BTC-REP", "BTC-SC", "BTC-GNT", "BTC-DGB",
+    "ETH-LTC", "ETH-BCC", "ETH-XRP", "ETH-ADA", "ETH-DASH", "ETH-XMR", "ETH-XLM","ETH-NEO", "ETH-QTUM", "ETH-OMG",
+    "ETH-ZEC", "ETH-SALT", "ETH-REP", "ETH-SC", "ETH-GNT", "ETH-DGB"]
 
     #marketsToWatch = ["BTC-SC"]
     #marketsToWatch = ["ETH-XRP"]
