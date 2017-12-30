@@ -219,14 +219,13 @@ def main(event, context):
                     msgColor = BEARISH_COLOR
                     signalType = SIGNAL_TYPE_SELL
 
-                publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
-                logging.debug(publishMsg)
-                alertMsgBuilder.append(publishMsg)
-                alertFound = True
-                logging.info("Alert Found!")
-
                 #persist the signal which we are about to send for later analysis
                 if signalType in [SIGNAL_TYPE_BUY, SIGNAL_TYPE_SELL]:
+                    publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
+                    logging.debug(publishMsg)
+                    alertMsgBuilder.append(publishMsg)
+                    alertFound = True
+                    logging.info("Alert Found!")
                     insertSignal(market_name=market, timestamp=priceTrendData[6], signal_type=signalType, price_trend=priceTrendData[3],
                     price_diff=priceTrendData[0], volume_trend=volumeTrendData[1], volume_diff=volumeTrendData[0],
                     last_interval_volume=volumeTrendData[3], intervals_open_price=priceTrendData[4]*dollarMultipler,
