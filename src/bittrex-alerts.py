@@ -7,119 +7,18 @@ import os
 import requests
 import boto3
 from utils import *
-from candles import candle, candlesInsights
+from candles import candle, candlesInsights, calculatePercentageDiff
 import time
 import sys
 from dao import *
 from constants import *
-
+from bittrexcore import *
 webhook_url = ""
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 client = boto3.client('sns')
-
-def call_api(url):
-    resp = urllib2.urlopen(url)
-    return json.loads(resp.read())
-
-def getMarketNames():
-    '''
-        this method gets all market names from bittrex
-    '''
-
-    resp = call_api(BITTREX_GET_MARKETS_URL)
-
-    logging.debug('Get Markets Response : {0}'.format(resp))
-
-    if not resp:
-        raise Exception("Could not retrieve markets from bittrex")
-
-    marketData = resp['result']
-
-    if not marketData:
-        raise Exception("Could not find market data in the bittrex response : {0}".format(resp))
-
-    logging.debug("Market Data is {0}".format(marketData))
-
-    marketNames = [x['MarketName'] for x in marketData]
-    logging.debug("Market Names Retrieved are {0}".format(marketNames))
-
-    return marketNames
-
-def getBTCPrice():
-    '''
-        Returns BTC price in USD
-    '''
-
-    resp = call_api(BITTREX_GET_BTC_PRICE_URL)
-
-    logging.debug('Get BTC Price response : {0}'.format(resp))
-
-    if not resp:
-        raise Exception("Could not retrieve btc price from bittrex")
-
-    resultData = resp['result']
-
-    if not resultData:
-        raise Exception('Could not find result data in the bittrex get btc price response : {0}'.format(resp))
-
-    btcPrice = resultData['bpi']['USD']['rate']
-
-    return btcPrice
-
-def getETHPrice(btc_price):
-    '''
-        Takes btc price in usd and returns eth price in USDT
-    '''
-    timestamp = str(int(time.time()))
-    url = BITTREX_GET_ETH_PRICE_URL.format(timestamp)
-
-    resp = call_api(url)
-
-    logging.debug('Get Last ETH Ticks Response : {0}'.format(resp))
-
-    tickData = resp['result']
-
-    if not tickData:
-        raise Exception("Could not find the ticks data in the bittrex response : {0}".format(resp))
-
-    ethPriceInBTC = tickData[0]['C']
-
-    return ethPriceInBTC*btc_price
-
-
-def getCandles(market_name, interval_size, intervals_to_retrieve=6):
-    '''
-        Get latest candles data for given market, interval size and interval numbers
-    '''
-    timestamp = str(int(time.time()))
-    url = BITTREX_GET_TICKS_URL.format(market_name, interval_size, timestamp)
-    #form the urllib
-    logging.debug("Get candles data for market {0} using url {1}".format(market_name, url))
-
-    resp = call_api(url)
-
-    logging.debug('Get Ticks Response : {0}'.format(resp))
-
-    tickData = resp['result']
-
-    if not tickData:
-        raise Exception("Could not find the ticks data in the bittrex response : {0}".format(resp))
-
-    logging.debug("Tick Data for Market {0} is {1}".format(market_name, tickData))
-
-    if len(tickData) < intervals_to_retrieve:
-        intervals_to_retrieve = len(tickData)
-
-    candles = list()
-    for data in tickData[-intervals_to_retrieve:]:
-        c = candle(data['H'], data['L'], data['O'], data['C'], data['V'], interval_size, data['T'])
-        candles.append(c)
-        logging.debug(c)
-
-    return candles
 
 def main(event, context):
     '''
@@ -128,19 +27,6 @@ def main(event, context):
     allMarketNames = getMarketNames()
 
 
-    #removed on 12/30/2017
-    #"BTC-ETC", "BTC-BTG", "BTC-WAVES", "BTC-STRAT", "BTC-ARDR", "BTC-MONA", "BTC-DOGE", "BTC-SNT", "BTC-DCR", "BTC-EMC2", "BTC-KMD", "BTC-PIVX",
-    # "BTC-PAY", "BTC-VTC", "BTC-GBYTE",
-    # "ETH-BTG", "ETH-ETC", "ETH-WAVES", "ETH-STRAT", "ETH-MCO", "ETH-SNT", "ETH-PAY", 
-
-    marketsToWatch = ["BTC-LTC", "BTC-ETH", "BTC-BCC", "BTC-XRP", "BTC-ADA", "BTC-DASH", "BTC-XMR", "BTC-XLM",
-    "BTC-NEO", "BTC-NEOS", "BTC-QTUM", "BTC-LSK", "BTC-OMG", "BTC-ZEC", "BTC-NXT",
-    "BTC-XVG", "BTC-STEEM", "BTC-ARK", "BTC-SALT", "BTC-REP", "BTC-SC", "BTC-GNT", "BTC-DGB",
-    "ETH-LTC", "ETH-BCC", "ETH-XRP", "ETH-ADA", "ETH-DASH", "ETH-XMR", "ETH-XLM","ETH-NEO", "ETH-QTUM", "ETH-OMG",
-    "ETH-ZEC", "ETH-SALT", "ETH-REP", "ETH-SC", "ETH-GNT", "ETH-DGB"]
-
-    #marketsToWatch = ["BTC-SC"]
-    #marketsToWatch = ["ETH-XRP"]
 
     #Get the algorithm configuration params from env if exists else use defaults
     priceChangeThreshold = int(os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD')) if os.environ.get('ALERT_PRICE_CHANGE_THRESHOLD') else DEFAULT_ALERT_PRICE_CHANGE_THRESHOLD
@@ -161,7 +47,7 @@ def main(event, context):
     ALERT_INTERVALS : {3}\n".format(priceChangeThreshold,
     volumeChangeThreshold, volumeMinThreshold, intervalSize))
 
-    markets = marketsToWatch if marketsToWatch else allMarketNames
+    markets = MARKETS_TO_WATCH if MARKETS_TO_WATCH else allMarketNames
 
     #Get the BTC Price
     btcPrice = float(getBTCPrice().replace(",",""))
@@ -205,21 +91,35 @@ def main(event, context):
             logging.info("PriceDiff {0}\nLastIntervalVolume {1}\npriceChangeThreshold {2}\nvolumeMinThreshold {3}".format(
             abs(float(priceTrendData[0])), abs(float(volumeTrendData[3])), priceChangeThreshold, volumeMinThreshold))
 
-            if abs(float(priceTrendData[0])) > float(priceChangeThreshold) and abs(float(volumeTrendData[3])) > float(volumeMinThreshold):
+            if abs(float(priceTrendData[0])) > float(priceChangeThreshold): #and abs(float(volumeTrendData[3])) > float(volumeMinThreshold):
+
+                #check for volume movements
+                marketMedianVolumeData = getMedianVolume(market)
+
+                print(marketMedianVolumeData)
+                #if there is a change in median volume in past 15 mins compared to median volume in past 24 hours, we have a situation to observe
+                medianVolumeChange = calculatePercentageDiff(marketMedianVolumeData.OneDayMedianVolume, marketMedianVolumeData.FifteenMinMedianVolume)
+
+                volumeTrend = 'NA'
+                if marketMedianVolumeData.FifteenMinMedianVolume > marketMedianVolumeData.OneDayMedianVolume:
+                    volumeTrend = 'UP'
+                else:
+                    volumeTrend = 'DOWN'
+
                 alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
-    VolumeDiff: {4:.2f}%\n\nLastIntervalVolume: {5:.2f} BTC\nIntervalsOpenPrice: ${6:.4f}\n\
-    IntervalsClosePrice: ${7:.4f}\nGreenCandles: {8}\nRedCandles: {9}\nIntervalSize: {10}\n\
-    IntervalsConsidered: {11}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
-    volumeTrendData[1], volumeTrendData[0], volumeTrendData[3], priceTrendData[4]*dollarMultipler,
+    MedianVolumeDiff: {4:.2f}%\n\nIntervalsOpenPrice: ${5:.4f}\n\
+    IntervalsClosePrice: ${6:.4f}\nGreenCandles: {7}\nRedCandles: {8}\nIntervalSize: {9}\n\
+    IntervalsConsidered: {10}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
+    volumeTrend, medianVolumeChange, priceTrendData[4]*dollarMultipler,
     priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
     intervalSize, intervalsToConsider)
 
                 msgColor = MIX_COLOR
                 signalType = SIGNAL_TYPE_NA
-                if priceTrendData[3] == BULLISH_TREND and volumeTrendData[1] == BULLISH_TREND:
+                if priceTrendData[3] == BULLISH_TREND:#and volumeTrendData[1] == BULLISH_TREND:
                     msgColor = BULLISH_COLOR
                     signalType = SIGNAL_TYPE_BUY
-                elif priceTrendData[3] == BEARISH_TREND and volumeTrendData[1] == BEARISH_TREND:
+                elif priceTrendData[3] == BEARISH_TREND:# and volumeTrendData[1] == BEARISH_TREND:
                     msgColor = BEARISH_COLOR
                     signalType = SIGNAL_TYPE_SELL
 
@@ -230,6 +130,9 @@ def main(event, context):
                     alertMsgBuilder.append(publishMsg)
                     alertFound = True
                     logging.info("Alert Found!")
+
+                    #Dsiabling stopring of signals data 12/31/2017
+                    '''
                     insertSignal(market_name=market, timestamp=priceTrendData[6], signal_type=signalType, price_trend=priceTrendData[3],
                     price_diff=priceTrendData[0], volume_trend=volumeTrendData[1], volume_diff=volumeTrendData[0],
                     last_interval_volume=volumeTrendData[3], intervals_open_price=priceTrendData[4]*dollarMultipler,
@@ -237,6 +140,7 @@ def main(event, context):
                     red_candles_count=priceTrendData[2], interval_size=intervalSize, intervals_considered=intervalsToConsider,
                     price_change_threshold=priceChangeThreshold, volume_min_threshold=volumeMinThreshold,
                     volume_change_threshold=volumeChangeThreshold)
+                    '''
 
     if not alertFound:
         publishMsg = formatSlackHealthMessage("Boring Market!\nNothing to alert on based on current thresholds.")
@@ -247,7 +151,6 @@ def main(event, context):
 
     if alertFound:#Currently stopping sending health messages, I'll set that up using cloudwatch alarms
         logging.info("Total alerts to send {0}".format(len(alertMsgBuilder)))
-
         for msg in alertMsgBuilder:
             '''
             client.publish(TopicArn=snsTopicARN,
@@ -262,6 +165,8 @@ def main(event, context):
                 raise ValueError(
                     'Request to slack returned an error %s, the response is:\n%s' % (response.status_code, response.text)
                     )
+
+            logging.info("Alert Sent!")
 
 
 if __name__ == '__main__':

@@ -42,6 +42,26 @@ class candlesInsights(object):
     def __init__(self, candles):
         self.candles = candles
 
+
+    def getMedianVolume(self, candlesToConsider=None):
+        '''
+            This method identifies the median volume of the candles
+        '''
+
+        if not candlesToConsider:
+            candlesToConsider = len(self.candles)
+
+        candlesTmp = self.candles[-candlesToConsider:-1]
+
+        #first get the list of the volume for all candles
+        volumeDataRaw = [x.volume for x in candlesTmp]
+
+        medianVolume = median(volumeDataRaw)
+
+        return medianVolume
+
+
+
     def getVolumeTrend(self):
         '''
             This method identifies the volume pattern of the candles
