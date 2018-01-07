@@ -37,7 +37,7 @@ def main(event, context):
     for ms in marketSummaries:
         time.sleep(0.2)#to prevent throttling
         timestamp = utc_to_pst(convert_bittrex_timestamp_to_datetime(ms.timestamp))
-        ms.timestamp = timestamp
+        #ms.timestamp = timestamp #TODO: do transformation to save pacific time instead of utc
         interval = calculateIntervalNumber(timestamp, 5)#we consider 5 minute interval for now, TODO: this should be configurable
         dateandinterval = timestamp.strftime("%Y-%m-%d") + "#" + str(interval)
         insertMarketSummary(ms, dateandinterval)

@@ -149,7 +149,7 @@ def main(event, context):
     btcPrice = float(getBTCPrice())
     ethPrice = getETHPrice(btcPrice)
 
-    marketNames = getMarketNames()
+    marketNames = getMarketNames(min_base_volume=CRYPTO_MOVERS_MARKETS_TO_WATCH_BASE_VOLUME_MIN)
     #marketNames = ['BTC-LTC', 'BTC-ETH', 'BTC-SC', 'BTC-XVG', 'BTC-NXS', 'BTC-XLM', 'BTC-XRP', 'ETH-LTC', 'ETH-XRP']
 
     logging.info("Considering {0} Markets".format(str(len(marketNames))))

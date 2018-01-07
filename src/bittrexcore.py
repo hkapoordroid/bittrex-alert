@@ -39,12 +39,12 @@ def getMarketSummaries():
 
     return marketSummariesList
 
-def getMarketNames():
+def getMarketNames(min_base_volume=250):
     '''
         this method gets all market names from bittrex and returns list of strings
     '''
 
-    resp = call_api(BITTREX_GET_MARKETS_URL)
+    resp = call_api(BITTREX_GET_MARKETS_SUMMARIES_URL)
 
     logging.debug('Get Markets Response : {0}'.format(resp))
 
@@ -58,7 +58,7 @@ def getMarketNames():
 
     logging.debug("Market Data is {0}".format(marketData))
 
-    marketNames = [x['MarketName'] for x in marketData]
+    marketNames = [x['MarketName'] for x in marketData if x['BaseVolume'] > min_base_volume and not x['MarketName'].startswith('USDT')]#we only return
     logging.debug("Market Names Retrieved are {0}".format(marketNames))
 
     return marketNames
@@ -135,3 +135,9 @@ def getCandles(market_name, interval_size, intervals_to_retrieve=6):
         logging.debug(c)
 
     return candles
+
+
+if __name__ == "__main__":
+    print(str(len(getMarketNames(750))))
+    for ms in getMarketNames(750):
+        print(ms)

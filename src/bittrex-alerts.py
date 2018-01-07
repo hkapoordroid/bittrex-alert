@@ -24,7 +24,7 @@ def main(event, context):
     '''
         main function which executes the alerts
     '''
-    allMarketNames = getMarketNames()
+    allMarketNames = getMarketNames(min_base_volume=CRYPTO_VOLATILITY_MARKETS_TO_WATCH_BASE_VOLUME_MIN)
 
 
 
@@ -42,7 +42,8 @@ def main(event, context):
     ALERT_INTERVALS : {3}\n".format(priceChangeThreshold,
     volumeChangeThreshold, volumeMinThreshold, intervalSize))
 
-    markets = MARKETS_TO_WATCH if MARKETS_TO_WATCH else allMarketNames
+    #markets = MARKETS_TO_WATCH if MARKETS_TO_WATCH else allMarketNames
+    markets = allMarketNames
 
     #Get the BTC Price
     btcPrice = float(getBTCPrice().replace(",",""))
