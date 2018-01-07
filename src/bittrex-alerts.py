@@ -13,7 +13,7 @@ import sys
 from dao import *
 from constants import *
 from bittrexcore import *
-webhook_url = ""
+
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -35,11 +35,6 @@ def main(event, context):
     intervalSize = os.environ.get('ALERT_INTERVAL') if os.environ.get('ALERT_INTERVAL') else TICKINTERVAL_FIVEMIN
     intervalsToConsider = os.environ.get('INTERVALS_TO_CONSIDER') if os.environ.get('INTERVALS_TO_CONSIDER') else INTERVALS_TO_CONSIDER
     snsTopicARN = os.environ.get('SNS_TOPIC_ARN')
-
-    if not snsTopicARN:
-        raise Exception('Please provide sns topic arn as environment variable.')
-        #example: prod : 'arn:aws:sns:us-east-1:787766881935:bittrex-alerts'
-        #beta : 'arn:aws:sns:us-east-1:787766881935:beta-bittrex-alerts'
 
     logging.info("ALERT_PRICE_CHANGE_THRESHOLD : {0}\n \
     ALERT_VOLUME_CHANGE_THRESHOLD : {1}\n \
@@ -107,9 +102,9 @@ def main(event, context):
                     volumeTrend = 'DOWN'
 
                 alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
-    MedianVolumeDiff: {4:.2f}%\n\nIntervalsOpenPrice: ${5:.4f}\n\
-    IntervalsClosePrice: ${6:.4f}\nGreenCandles: {7}\nRedCandles: {8}\nIntervalSize: {9}\n\
-    IntervalsConsidered: {10}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
+MedianVolumeDiff: {4:.2f}%\n\nIntervalsOpenPrice: ${5:.4f}\n\
+IntervalsClosePrice: ${6:.4f}\nGreenCandles: {7}\nRedCandles: {8}\nIntervalSize: {9}\n\
+IntervalsConsidered: {10}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
     volumeTrend, medianVolumeChange, priceTrendData[4]*dollarMultipler,
     priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
     intervalSize, intervalsToConsider)
@@ -125,7 +120,8 @@ def main(event, context):
 
                 #persist the signal which we are about to send for later analysis
                 if signalType in [SIGNAL_TYPE_BUY, SIGNAL_TYPE_SELL]:
-                    publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
+                    #publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
+                    publishMsg = formatTelegramVolatilityLeadPlainTextMessage(market, alertText)
                     logging.debug(publishMsg)
                     alertMsgBuilder.append(publishMsg)
                     alertFound = True
@@ -160,11 +156,18 @@ def main(event, context):
             logging.info('Published to SNS Topic {0}'.format(snsTopicARN))
             '''
 
+            '''
+            #slack web hook
             response = requests.post(webhook_url, data=json.dumps(msg), headers={'Content-Type': 'application/json'})
+            '''
+
+            response = requests.post(CRYPTO_VOLATILITY_LEADS_WEBHOOK, data=json.dumps(msg), headers={'Content-Type': 'application/json'})
+
             if response.status_code != 200:
                 raise ValueError(
                     'Request to slack returned an error %s, the response is:\n%s' % (response.status_code, response.text)
                     )
+
 
             logging.info("Alert Sent!")
 

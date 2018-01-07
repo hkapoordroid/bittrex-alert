@@ -8,18 +8,40 @@ import requests
 import boto3
 from utils import *
 from candles import candle, candlesInsights
+from marketsummary import MarketSummary
 import time
 import sys
 from dao import *
 from constants import *
+import string
 
 
 logger = logging.getLogger()
 
+def getMarketSummaries():
+    '''
+        this method gets all market summaries data and returns it as list of marketsummary objects
+    '''
+
+    resp = call_api(BITTREX_GET_MARKETS_SUMMARIES_URL)
+
+    if not resp:
+        raise Exception("Could not retrieve market summaries from bittrex")
+
+    marketSummariesData = resp['result']
+
+    marketSummariesList = set()
+    for ms in marketSummariesData:
+        msObj = MarketSummary(name=ms['MarketName'], high=ms['High'], low=ms['Low'], volume=ms['Volume'], last=ms['Last'],
+        base_volume=ms['BaseVolume'], timestamp=ms['TimeStamp'], bid=ms['Bid'], ask=ms['Ask'], open_buy_orders=ms['OpenBuyOrders'],
+        open_sell_orders=ms['OpenSellOrders'], prev_day=ms['PrevDay'], created=ms['Created'])
+        marketSummariesList.add(msObj)
+
+    return marketSummariesList
 
 def getMarketNames():
     '''
-        this method gets all market names from bittrex
+        this method gets all market names from bittrex and returns list of strings
     '''
 
     resp = call_api(BITTREX_GET_MARKETS_URL)
@@ -58,7 +80,7 @@ def getBTCPrice():
     if not resultData:
         raise Exception('Could not find result data in the bittrex get btc price response : {0}'.format(resp))
 
-    btcPrice = resultData['bpi']['USD']['rate']
+    btcPrice = string.replace(resultData['bpi']['USD']['rate'], ',', '')
 
     return btcPrice
 

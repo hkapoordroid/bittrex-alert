@@ -7,12 +7,14 @@ import sys
 import datetime
 import time
 from decimal import *
+from marketsummary import MarketSummary
 
 logger = logging.getLogger()
 
 dynamodb = boto3.resource('dynamodb')
 bittrexAlertsSignalsTable = dynamodb.Table('bittrex-alerts-signals')
 bittrexMedianVolumesTable = dynamodb.Table('bittrex-median-volumes')
+bittrexMarketSummariesTable = dynamodb.Table('bittrex-market-summaries')
 
 class medianVolume(object):
 
@@ -26,7 +28,7 @@ class medianVolume(object):
     def __str__(self):
         return "FifteenMinMedianVolume {0}\nOneHourMedianVolume {1}\nThreeHourMedianVolume {2}\n\
         OneDayMedianVolume {3}\nLastUpdatedTimeStamp {4}".format(
-        str(self.FifteenMinMedianVolume), str(self.OneHourMedianVolume), str(self.ThreeHourMedianVolume), 
+        str(self.FifteenMinMedianVolume), str(self.OneHourMedianVolume), str(self.ThreeHourMedianVolume),
         str(self.OneDayMedianVolume), self.LastUpdatedTimeStamp)
 
 def getMedianVolume(market_name):
@@ -51,6 +53,78 @@ def getMedianVolume(market_name):
 
     except:
         logging.error("Error while trying to get median volume for market {0}\nError message: {1}".format(market_name, sys.exc_info()))
+
+
+def getMarketSummary(market_name, date_interval):
+    try:
+        response = bittrexMarketSummariesTable.get_item(
+            Key={
+                'MarketName' : market_name,
+                'DateAndInterval' : date_interval,
+            }
+        )
+
+        if response and response['Item']:
+            item = response['Item']
+
+            name = item['MarketName']
+            dateInterval = item['DateAndInterval']
+            high = Decimal(item['High'])
+            low = Decimal(item['Low'])
+            volume = Decimal(item['Volume'])
+            last = Decimal(item['Last'])
+            baseVolume = Decimal(item['BaseVolume'])
+            timestamp = item['timestamp']
+            bid = Decimal(item['Bid'])
+            ask = Decimal(item['Ask'])
+            openBuyOrders = Decimal(item['OpenBuyOrders'])
+            openSellOrders = Decimal(item['OpenSellOrders'])
+            prevDay = Decimal(item['PrevDay'])
+            marketCreatedDate = item['CreatedDate']
+
+            return MarketSummary(name=name, high=high, low=low, volume=volume, last=last, base_volume=baseVolume,
+            timestamp=timestamp, bid=bid, ask=ask, open_buy_orders=openBuyOrders, open_sell_orders=openSellOrders, prev_day=prevDay,
+            created=marketCreatedDate)
+
+        else:
+            logging.error("Error while trying to get market summary for market {0} and date interval {1}\nError message: {2}".format(market_name,
+            date_interval, sys.exc_info()))
+
+            return None
+
+    except:
+        logging.error("Error while trying to get market summary for market {0} and date interval {1}\nError message: {2}".format(market_name,
+        date_interval, sys.exc_info()))
+
+    return None
+
+def insertMarketSummary(market_summary,date_interval):
+    try:
+        #items are inserted with ttl of 25 hours
+
+        itemToInsert = {
+            "MarketName" : market_summary.name,
+            "DateAndInterval" : date_interval,
+            "High" : "%.15g" % float(market_summary.high),
+            "Low" : "%.15g" % float(market_summary.low),
+            "Volume" : "%.15g" % float(market_summary.volume),
+            "Last" : "%.15g" % float(market_summary.last),
+            "BaseVolume" : "%.15g" % float(market_summary.baseVolume),
+            "timestamp" : market_summary.timestamp,
+            "TTLTimestamp" : int(time.time()) + 90000,
+            "Bid" : "%.15g" % float(market_summary.bid),
+            "Ask" : "%.15g" % float(market_summary.ask),
+            "OpenBuyOrders" : "%.15g" % float(market_summary.openBuyOrders),
+            "OpenSellOrders" : "%.15g" % float(market_summary.openSellOrders),
+            "PrevDay" : "%.15g" % float(market_summary.prevDay),
+            "CreatedDate" : market_summary.created,
+        }
+
+        bittrexMarketSummariesTable.put_item(Item=itemToInsert)
+
+        logging.info("Market Summary data persisted for market {0} and dateinterval {1}".format(market_summary.name, date_interval))
+    except:
+        logging.error("Error while trying to persist market summary for market {0}\n Error message: {1}".format(market_summary.name, sys.exc_info()))
 
 
 def insertMedianVolume(market_name, fifteen_min_median_volume, one_hour_median_volume, three_hour_median_volume, one_day_median_volume):
