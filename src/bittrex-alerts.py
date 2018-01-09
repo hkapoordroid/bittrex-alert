@@ -56,88 +56,92 @@ def main(event, context):
     alertFound = False
     for market in markets:
 
-        logging.info("Processing market {0}".format(market))
-        time.sleep(1)#in order to avoid getting throtled
+        #TODO: CHANGE THIS IN THE FUTURE, BUT FOR NOW ONLY CONSIDER BTC MARKETS
+        if market.startswith('BTC'):
 
-        dollarMultipler = None
 
-        if market.startswith("BTC"):
-            dollarMultipler = btcPrice
-        elif market.startswith("ETH"):
-            dollarMultipler = ethPrice
-        else:
-            raise Exception("Unsupported Market being analyzed {0}".format(market))
+            logging.info("Processing market {0}".format(market))
+            time.sleep(1)#in order to avoid getting throtled
 
-        candlesList = None
-        try:
-            candlesList = getCandles(market, intervalSize, intervalsToConsider)
-        except:
-            logging.error("Couldn't find data for market {0} : {1}".format(market, sys.exc_info()[0]))
+            dollarMultipler = None
 
-        if candlesList:
-            candlesInsightsObj = candlesInsights(candlesList)
+            if market.startswith("BTC"):
+                dollarMultipler = btcPrice
+            elif market.startswith("ETH"):
+                dollarMultipler = ethPrice
+            else:
+                raise Exception("Unsupported Market being analyzed {0}".format(market))
 
-            #alertMsg = alertOnDiffInPriceAndVolume(market, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold)
-            priceTrendData = candlesInsightsObj.getPriceTrend()
-            volumeTrendData = candlesInsightsObj.getVolumeTrend()
+            candlesList = None
+            try:
+                candlesList = getCandles(market, intervalSize, intervalsToConsider)
+            except:
+                logging.error("Couldn't find data for market {0} : {1}".format(market, sys.exc_info()[0]))
 
-            #apply the alert threshold rules
-            #priceTrendData is tuple of format (priceDiff, greenCandlesCount, redCandlesCount, priceTrend, intervalsOpenPrice, intervalsClosePrice. lastIntervalTimestamp)
-            #volumeTrendData is tuple of format (volumeDiff, volumeTrend, firstIntervalVolume, lastIntervalVolume)
-            logging.info("PriceDiff {0}\nLastIntervalVolume {1}\npriceChangeThreshold {2}\nvolumeMinThreshold {3}".format(
-            abs(float(priceTrendData[0])), abs(float(volumeTrendData[3])), priceChangeThreshold, volumeMinThreshold))
+            if candlesList:
+                candlesInsightsObj = candlesInsights(candlesList)
 
-            if abs(float(priceTrendData[0])) > float(priceChangeThreshold): #and abs(float(volumeTrendData[3])) > float(volumeMinThreshold):
+                #alertMsg = alertOnDiffInPriceAndVolume(market, candles, priceChangeThreshold, volumeChangeThreshold, volumeMinThreshold)
+                priceTrendData = candlesInsightsObj.getPriceTrend()
+                volumeTrendData = candlesInsightsObj.getVolumeTrend()
 
-                #check for volume movements
-                marketMedianVolumeData = getMedianVolume(market)
+                #apply the alert threshold rules
+                #priceTrendData is tuple of format (priceDiff, greenCandlesCount, redCandlesCount, priceTrend, intervalsOpenPrice, intervalsClosePrice. lastIntervalTimestamp)
+                #volumeTrendData is tuple of format (volumeDiff, volumeTrend, firstIntervalVolume, lastIntervalVolume)
+                logging.info("PriceDiff {0}\nLastIntervalVolume {1}\npriceChangeThreshold {2}\nvolumeMinThreshold {3}".format(
+                abs(float(priceTrendData[0])), abs(float(volumeTrendData[3])), priceChangeThreshold, volumeMinThreshold))
 
-                print(marketMedianVolumeData)
-                #if there is a change in median volume in past 15 mins compared to median volume in past 24 hours, we have a situation to observe
-                medianVolumeChange = calculatePercentageDiff(marketMedianVolumeData.OneDayMedianVolume, marketMedianVolumeData.FifteenMinMedianVolume)
+                if abs(float(priceTrendData[0])) > float(priceChangeThreshold): #and abs(float(volumeTrendData[3])) > float(volumeMinThreshold):
 
-                volumeTrend = 'NA'
-                if marketMedianVolumeData.FifteenMinMedianVolume > marketMedianVolumeData.OneDayMedianVolume:
-                    volumeTrend = 'UP'
-                else:
-                    volumeTrend = 'DOWN'
+                    #check for volume movements
+                    marketMedianVolumeData = getMedianVolume(market)
 
-                alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
-MedianVolumeDiff: {4:.2f}%\n\nIntervalsOpenPrice: ${5:.4f}\n\
-IntervalsClosePrice: ${6:.4f}\nGreenCandles: {7}\nRedCandles: {8}\nIntervalSize: {9}\n\
-IntervalsConsidered: {10}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
-    volumeTrend, medianVolumeChange, priceTrendData[4]*dollarMultipler,
-    priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
-    intervalSize, intervalsToConsider)
+                    print(marketMedianVolumeData)
+                    #if there is a change in median volume in past 15 mins compared to median volume in past 24 hours, we have a situation to observe
+                    medianVolumeChange = calculatePercentageDiff(marketMedianVolumeData.OneDayMedianVolume, marketMedianVolumeData.FifteenMinMedianVolume)
 
-                msgColor = MIX_COLOR
-                signalType = SIGNAL_TYPE_NA
-                if priceTrendData[3] == BULLISH_TREND:#and volumeTrendData[1] == BULLISH_TREND:
-                    msgColor = BULLISH_COLOR
-                    signalType = SIGNAL_TYPE_BUY
-                elif priceTrendData[3] == BEARISH_TREND:# and volumeTrendData[1] == BEARISH_TREND:
-                    msgColor = BEARISH_COLOR
-                    signalType = SIGNAL_TYPE_SELL
+                    volumeTrend = 'NA'
+                    if marketMedianVolumeData.FifteenMinMedianVolume > marketMedianVolumeData.OneDayMedianVolume:
+                        volumeTrend = 'UP'
+                    else:
+                        volumeTrend = 'DOWN'
 
-                #persist the signal which we are about to send for later analysis
-                if signalType in [SIGNAL_TYPE_BUY, SIGNAL_TYPE_SELL]:
-                    #publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
-                    publishMsg = formatTelegramVolatilityLeadPlainTextMessage(market, alertText)
-                    logging.debug(publishMsg)
-                    alertMsgBuilder.append(publishMsg)
-                    alertFound = True
-                    logging.info("Alert Found!")
+                    alertText = "Time: {0}\n\nPriceTrend: {1}\nPriceDiff: {2:.2f}%\n\nVolumeTrend: {3}\n\
+    MedianVolumeDiff: {4:.2f}%\n\nIntervalsOpenPrice: ${5:.4f}\n\
+    IntervalsClosePrice: ${6:.4f}\nGreenCandles: {7}\nRedCandles: {8}\nIntervalSize: {9}\n\
+    IntervalsConsidered: {10}".format(priceTrendData[6], priceTrendData[3], priceTrendData[0],
+        volumeTrend, medianVolumeChange, priceTrendData[4]*dollarMultipler,
+        priceTrendData[5]*dollarMultipler, priceTrendData[1], priceTrendData[2],
+        intervalSize, intervalsToConsider)
 
-                    #Dsiabling stopring of signals data 12/31/2017
-                    '''
-                    insertSignal(market_name=market, timestamp=priceTrendData[6], signal_type=signalType, price_trend=priceTrendData[3],
-                    price_diff=priceTrendData[0], volume_trend=volumeTrendData[1], volume_diff=volumeTrendData[0],
-                    last_interval_volume=volumeTrendData[3], intervals_open_price=priceTrendData[4]*dollarMultipler,
-                    intervals_close_price=priceTrendData[5]*dollarMultipler, green_candles_count=priceTrendData[1],
-                    red_candles_count=priceTrendData[2], interval_size=intervalSize, intervals_considered=intervalsToConsider,
-                    price_change_threshold=priceChangeThreshold, volume_min_threshold=volumeMinThreshold,
-                    volume_change_threshold=volumeChangeThreshold)
-                    '''
+                    msgColor = MIX_COLOR
+                    signalType = SIGNAL_TYPE_NA
+                    if priceTrendData[3] == BULLISH_TREND:#and volumeTrendData[1] == BULLISH_TREND:
+                        msgColor = BULLISH_COLOR
+                        signalType = SIGNAL_TYPE_BUY
+                    elif priceTrendData[3] == BEARISH_TREND:# and volumeTrendData[1] == BEARISH_TREND:
+                        msgColor = BEARISH_COLOR
+                        signalType = SIGNAL_TYPE_SELL
+
+                    #persist the signal which we are about to send for later analysis
+                    if signalType in [SIGNAL_TYPE_BUY, SIGNAL_TYPE_SELL]:
+                        #publishMsg = formatSlackAlertMessage(BITTREX_ALERT_TITLE, market, market, alertText, msgColor)
+                        publishMsg = formatTelegramVolatilityLeadPlainTextMessage(market, alertText)
+                        logging.debug(publishMsg)
+                        alertMsgBuilder.append(publishMsg)
+                        alertFound = True
+                        logging.info("Alert Found!")
+
+                        #Dsiabling stopring of signals data 12/31/2017
+                        '''
+                        insertSignal(market_name=market, timestamp=priceTrendData[6], signal_type=signalType, price_trend=priceTrendData[3],
+                        price_diff=priceTrendData[0], volume_trend=volumeTrendData[1], volume_diff=volumeTrendData[0],
+                        last_interval_volume=volumeTrendData[3], intervals_open_price=priceTrendData[4]*dollarMultipler,
+                        intervals_close_price=priceTrendData[5]*dollarMultipler, green_candles_count=priceTrendData[1],
+                        red_candles_count=priceTrendData[2], interval_size=intervalSize, intervals_considered=intervalsToConsider,
+                        price_change_threshold=priceChangeThreshold, volume_min_threshold=volumeMinThreshold,
+                        volume_change_threshold=volumeChangeThreshold)
+                        '''
 
     if not alertFound:
         publishMsg = formatSlackHealthMessage("Boring Market!\nNothing to alert on based on current thresholds.")
